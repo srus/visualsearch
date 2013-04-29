@@ -144,15 +144,15 @@ VS.ui.SearchBox = Backbone.View.extend({
 
     return _.compact(query).join(' ');
   },
-  
+
   // Returns any facet views that are currently selected. Useful for changing the value
   // callbacks based on what else is in the search box and which facet is being edited.
   selected: function() {
-    return _.select(this.facetViews, function(view) { 
+    return _.select(this.facetViews, function(view) {
       return view.modes.editing == 'is' || view.modes.selected == 'is';
     });
   },
-  
+
   // Similar to `this.selected`, returns any facet models that are currently selected.
   selectedModels: function() {
     return _.pluck(this.selected(), 'model');
@@ -190,7 +190,7 @@ VS.ui.SearchBox = Backbone.View.extend({
     category     = VS.utils.inflector.trim(category);
     initialQuery = VS.utils.inflector.trim(initialQuery || '');
     if (!category) return;
-    
+
     var model = new VS.model.SearchFacet({
       category : category,
       value    : initialQuery || '',
@@ -220,7 +220,11 @@ VS.ui.SearchBox = Backbone.View.extend({
   // remaining facet is selected, but this is handled by the facet's view,
   // since its position is unknown by the time the collection triggers this
   // remove callback.
-  removedFacet : function (facet, query, options) {},
+  removedFacet : function (facet, query, options) {
+    if (this.app.options.callbacks.removedFacet) {
+      this.app.options.callbacks.removedFacet(facet, query, options);
+    }
+  },
 
   // Renders each facet as a searchFacet view.
   renderFacets : function() {
@@ -258,14 +262,14 @@ VS.ui.SearchBox = Backbone.View.extend({
   // Render a single input, used to create and autocomplete facets
   renderSearchInput : function() {
     var input = new VS.ui.SearchInput({
-      position: this.inputViews.length, 
+      position: this.inputViews.length,
       app: this.app,
       showFacets: this.options.showFacets
     });
     this.$('.VS-search-inner').append(input.render().el);
     this.inputViews.push(input);
   },
-  
+
   // Handles showing/hiding the placeholder text
   renderPlaceholder : function() {
     var $placeholder = this.$('.VS-placeholder');
@@ -436,7 +440,7 @@ VS.ui.SearchBox = Backbone.View.extend({
     }
     if (options.selectText) view.selectText();
     this.resizeFacets();
-    
+
     return true;
   },
 
@@ -673,7 +677,7 @@ VS.ui.SearchFacet = Backbone.View.extend({
   // Search terms used in the autocomplete menu. These are specific to the facet,
   // and only match for the facet's category. The values are then matched on the
   // first letter of any word in matches, and finally sorted according to the
-  // value's own category. You can pass `preserveOrder` as an option in the 
+  // value's own category. You can pass `preserveOrder` as an option in the
   // `facetMatches` callback to skip any further ordering done client-side.
   autocompleteValues : function(req, resp) {
     var category = this.model.get('category');
@@ -683,7 +687,7 @@ VS.ui.SearchFacet = Backbone.View.extend({
     this.options.app.options.callbacks.valueMatches(category, searchTerm, function(matches, options) {
       options = options || {};
       matches = matches || [];
-      
+
       if (searchTerm && value != searchTerm) {
         if (options.preserveMatches) {
           resp(matches);
@@ -697,7 +701,7 @@ VS.ui.SearchFacet = Backbone.View.extend({
         });
         }
       }
-      
+
       if (options.preserveOrder) {
         resp(matches);
       } else {
@@ -865,12 +869,8 @@ VS.ui.SearchFacet = Backbone.View.extend({
     this.deselectFacet();
     this.disableEdit();
     this.options.app.searchQuery.remove(this.model);
-    if (committed && this.options.app.options.autosearch) {
-      this.search(e, -1);
-    } else {
-      this.options.app.searchBox.renderFacets();
-      this.options.app.searchBox.focusNextFacet(this, -1, {viewPosition: this.options.order});
-    }
+    this.options.app.searchBox.renderFacets();
+    this.options.app.searchBox.focusNextFacet(this, -1, {viewPosition: this.options.order});
   },
 
   // Selects the text in the facet's input field. When the user tabs between
@@ -927,6 +927,16 @@ VS.ui.SearchFacet = Backbone.View.extend({
       this.options.app.searchBox.focusNextFacet(this, -1, {startAtEnd: -1});
       this.remove(e);
     } else if (key == 'backspace') {
+       $(document).on('keydown.backspace', function(e) {
+          if (VS.app.hotkeys.key(e) === 'backspace') {
+             e.preventDefault();
+          }
+       });
+
+       $(document).on('keyup.backspace', function(e) {
+          $(document).off('.backspace');
+       });
+
       if (this.modes.selected == 'is') {
         e.preventDefault();
         this.remove(e);
@@ -935,6 +945,7 @@ VS.ui.SearchFacet = Backbone.View.extend({
         e.preventDefault();
         this.selectFacet();
       }
+       e.stopPropagation();
     }
 
     // Handle paste events
